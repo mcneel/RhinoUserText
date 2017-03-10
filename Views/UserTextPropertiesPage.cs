@@ -246,7 +246,19 @@ namespace RhinoUserText.Views
         }
         private void Btn_obj_delete_Click(object sender, EventArgs e)
         {
-
+            //Delete a string entry from any object thats selected
+            while (m_grid.SelectedRows.Any())
+            {
+                var first_selected = m_grid.SelectedRows.First();
+                if (first_selected < 0)
+                    break;
+                    foreach (var ro in SelectedObjects)
+                    {
+                        ro.Attributes.DeleteUserString(m_collection[first_selected].Key);
+                        ro.CommitChanges();
+                    }
+                m_collection.RemoveAt(first_selected);
+             }
         }
         private void Btn_obj_import_Click(object sender, EventArgs e)
         {
@@ -266,21 +278,41 @@ namespace RhinoUserText.Views
         }
         private void Btn_obj_match_Click(object sender, EventArgs e)
         {
+            var originalselected_objects = SelectedObjects;
+            var first_or_default = originalselected_objects.FirstOrDefault();
+            if (first_or_default == null) return;
+
+            var doc = first_or_default.Document;
+            
+            doc.Objects.UnselectAll(false);
+            doc.Views.Redraw();
 
             var go = new GetObject();
+            go.SetCommandPrompt(LOC.STR("Select object To match"));
             go.Get();
+           
             if (go.Result() != GetResult.Object)
                 return;
 
             var dict = new Dictionary<string, string>();
             GetUserStringDictionary(go.Object(0).Object(), ref dict);
 
+            doc.Objects.UnselectAll(false);
+            foreach (var ro in originalselected_objects)
+            {
+                doc.Objects.Select(ro.Id);
+            }
+            doc.Views.Redraw();
+
             foreach (var ro in SelectedObjects)
             {
-                //TODO steve to update attributes
+               ro.Attributes.DeleteAllUserStrings();
+                foreach (var entry in dict)
+                {
+                    ro.Attributes.SetUserString(entry.Key, entry.Value);
+                }
+                ro.CommitChanges();
             }
-
-
         }
         #endregion
         
@@ -523,6 +555,7 @@ namespace RhinoUserText.Views
                     csv.AppendLine(entry);
 
                 File.WriteAllText(fd.FileName, csv.ToString());
+                RhinoApp.WriteLine(LOC.STR($"File successfully written to {fd.FileName}"));
             }
             catch (Exception ex)
             {
