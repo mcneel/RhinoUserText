@@ -51,19 +51,39 @@ namespace RhinoUserText.Views
         }
         private UserStringsPanelControl m_page_control;
         public override object PageControl => (m_page_control ?? (m_page_control = new UserStringsPanelControl(Document)));
+        public override bool OnApply()
+        {
+            return (m_page_control == null || m_page_control.OnApply());
+            return base.OnApply();
+        }
     }
     #endregion
 
     class UserStringsPanelControl : Panel
     {
         #region localized strings for things
+        private readonly string m_new = LOC.STR("New...");
+        private readonly string m_delete = LOC.STR("Delete..");
+        private readonly string m_import = LOC.STR("Import...");
+        private readonly string m_export = LOC.STR("Export...");
+        private readonly string m_match = LOC.STR("Match...");
+        private readonly string m_command_prompt = LOC.STR("Select object To match");
+        private readonly string m_headerkey = LOC.STR("Key");
+        private readonly string m_headervalue = LOC.STR("Value");
         private readonly string m_dialog_import_title = LOC.STR("Import CSV");
         private readonly string m_dialog_export_title = LOC.STR("Export CSV");
         private readonly string m_csvstr = LOC.STR("CSV (Comma delimited");
         private readonly string m_txtstr = LOC.STR("TXT (Comma delimited)");
         private readonly string m_file_error_message_title = LOC.STR("Import Error");
         private readonly string m_file_locked_message = LOC.STR("File is currently in use.");
+        private readonly string m_replace_file = LOC.STR("Are you sure you want to replace");
+        private readonly string m_file_success = LOC.STR("File successfully written to");
+        private readonly string m_varies = LOC.STR("(varies)");
+        private readonly string m_csv = LOC.STR(".csv");
+        private readonly string m_txt = LOC.STR(".txt");
+
         #endregion
+
 
         private GridView m_grid;
         private Dictionary<string, string> m_dictionary = new Dictionary<string, string>();
@@ -101,11 +121,7 @@ namespace RhinoUserText.Views
         private void LayoutPanel()
         {
             #region Construct a GridView
-            string headerkey = LOC.STR("Key");
-            string headervalue = LOC.STR("Value");
-
             m_grid = new GridView { DataStore = m_collection };
-
             m_grid.SizeChanged += Grid_SizeChanged;
             m_grid.GridLines = GridLines.Both;
             m_grid.AllowColumnReordering = false;
@@ -113,13 +129,13 @@ namespace RhinoUserText.Views
             m_grid.Columns.Add(new GridColumn
             {
                 DataCell = new TextBoxCell("Key"),
-                HeaderText = headerkey,
+                HeaderText = m_headerkey,
                 AutoSize = false,
             });
             m_grid.Columns.Add(new GridColumn
             {
                 DataCell = new TextBoxCell("Value"),
-                HeaderText = headervalue,
+                HeaderText = m_headervalue,
                 AutoSize = false,
             });
 
@@ -127,6 +143,7 @@ namespace RhinoUserText.Views
             m_grid.Columns[1].Editable = true;
             m_grid.Columns[0].Sortable = true;
             m_grid.Columns[1].Sortable = true;
+            m_grid.Height = 200;
 
             if (IsDocumentText)
             {
@@ -144,16 +161,16 @@ namespace RhinoUserText.Views
             //Build the main table
             Content = new TableLayout
             {
+                Padding = new Padding(4,4,4,20),
                 Spacing = new Size(4, 4),
                 Rows =
                 {
-                   // new TableRow(new LabelSeparator() {Text = LOC.STR("User Text")}),
                     new TableLayout()
                     {
-                        Spacing = new Size(10,4),
+                        Spacing = new Size(4,4),
                         Rows =
                         {
-                        new TableRow(new TableCell(m_grid,true), new TableCell(btn_stack_layout)){ ScaleHeight = true},
+                        new TableRow(new TableCell(m_grid,true), new TableCell(btn_stack_layout)){ScaleHeight = false},
                         }
                     },
                 }
@@ -165,29 +182,28 @@ namespace RhinoUserText.Views
 
             #region Create Buttons for the Object Properties Panel
             //Add our document buttons
-            var items = new Collection<StackLayoutItem>();
-            var btn_obj_add = new Button { Text = LOC.STR("New...") };
+            var btn_obj_add = new Button { Text = m_new};
             btn_obj_add.Click += Btn_obj_add_Click;
-            var btn_obj_delete = new Button { Text = LOC.STR("Delete...") };
+            var btn_obj_delete = new Button { Text = m_delete};
             btn_obj_delete.Click += Btn_obj_delete_Click;
-            var btn_obj_export = new Button { Text = LOC.STR("Export...") };
+            var btn_obj_export = new Button { Text = m_export};
             btn_obj_export.Click += Btn_obj_export_Click;
-            var btn_obj_import = new Button { Text = LOC.STR("Import...") };
+            var btn_obj_import = new Button { Text = m_import};
             btn_obj_import.Click += Btn_obj_import_Click;
-            var btn_obj_match = new Button { Text = LOC.STR("Match...") };
+            var btn_obj_match = new Button { Text = m_match};
             btn_obj_match.Click += Btn_obj_match_Click;
             #endregion
 
             #region Create Buttons for the Panel
             //Add our document buttons
-            var btn_doc_add = new Button { Text = LOC.STR("New...") };
-            btn_doc_add.Click += BtnAdd_Click;
-            var btn_doc_delete = new Button { Text = LOC.STR("Delete...") };
-            btn_doc_delete.Click += BtnDelete_Click;
-            var btn_doc_export = new Button { Text = LOC.STR("Export...") };
-            btn_doc_export.Click += BtnExport_Click;
-            var btn_doc_import = new Button { Text = LOC.STR("Import...") };
-            btn_doc_import.Click += Btn_import_Click;
+            var btn_doc_add = new Button { Text = m_new};
+            btn_doc_add.Click += Btn_doc_add_Click;
+            var btn_doc_delete = new Button { Text = m_delete};
+            btn_doc_delete.Click += Btn_doc_delete_Click;
+            var btn_doc_export = new Button { Text = m_export};
+            btn_doc_export.Click += Btn_doc_export_Click;
+            var btn_doc_import = new Button { Text = m_import};
+            btn_doc_import.Click += Btn_doc_import_Click;
             #endregion
             
             #region Content Layout
@@ -196,6 +212,7 @@ namespace RhinoUserText.Views
             StackLayout stack_layout;
             if (IsDocumentText)
             {
+                //Options - Document Properties Panel
                 stack_layout = new StackLayout
                 {
                     Padding = 4,
@@ -213,6 +230,7 @@ namespace RhinoUserText.Views
             }
             else
             {
+                //Object Properties Panel
                 stack_layout = new StackLayout
                 {
                     Padding = 4,
@@ -288,7 +306,7 @@ namespace RhinoUserText.Views
             doc.Views.Redraw();
 
             var go = new GetObject();
-            go.SetCommandPrompt(LOC.STR("Select object To match"));
+            go.SetCommandPrompt(m_command_prompt);
             go.Get();
            
             if (go.Result() != GetResult.Object)
@@ -315,63 +333,71 @@ namespace RhinoUserText.Views
             }
         }
         #endregion
-        
+
         //Document Properties Panel Buttons
         #region Document Properties Panel Buttons
-        private void Btn_import_Click(object sender, System.EventArgs e)
-        {
-            //Import a csv file to Document Strings 
-            ImportCsv(ref m_collection);
-            foreach (var c in m_collection)
-                Document.Strings.SetString(c.Key, c.Value);
-        }
-
-        private void BtnExport_Click(object sender, System.EventArgs e)
-        {
-            //Export the Document Strings to a CSV
-           ExportCsv(m_collection);
-        }
-        private void BtnDelete_Click(object sender, System.EventArgs e)
-        {
-            //DELETE DOCUMENT STRINGS
-            while (m_grid.SelectedRows.Any())
-            {
-                var first_selected = m_grid.SelectedRows.First();
-                if (first_selected < 0)
-                    break;
-
-                var dcount = Document.Strings.Count;
-                for (var i = 0; i <= dcount; i++)
-                {
-                    var key = Document.Strings.GetKey(i);
-                    var value = Document.Strings.GetValue(i);
-                    if (key != m_collection[first_selected].Key || value != m_collection[first_selected].Value)
-                        continue;
-
-                    Document.Strings.Delete(key);
-                    break;
-                }
-                m_collection.RemoveAt(first_selected);
-
-            }
-
-
-        }
-        private void BtnAdd_Click(object sender, System.EventArgs e)
+        private void Btn_doc_add_Click(object sender, EventArgs e)
         {
             //Add a new Document String
             m_collection.Add(new UserStringItem { Key = string.Empty, Value = string.Empty });
             m_grid.BeginEdit(m_collection.Count - 1, 0);
 
         }
+        private void Btn_doc_delete_Click(object sender, EventArgs e)
+        {
+            //DELETE COLLECTION STRINGS
+            while (m_grid.SelectedRows.Any())
+            {
+                var first_selected = m_grid.SelectedRows.First();
+                if (first_selected < 0)
+                    break;
+
+                m_collection.RemoveAt(first_selected);
+            }
+        }
+        private void Btn_doc_import_Click(object sender, EventArgs e)
+        {
+            //Import a csv file to Document Strings 
+            ImportCsv(ref m_collection);
+            foreach (var c in m_collection)
+                Document.Strings.SetString(c.Key, c.Value);
+        }
+        private void Btn_doc_export_Click(object sender, EventArgs e)
+        {
+            //Export the Document Strings to a CSV
+           ExportCsv(m_collection);
+        }
+
+
+        //OnApply Button
+        public bool OnApply()
+        {
+            //Remove all existing strings
+            while (Document.Strings.Count > 0)
+            {
+                Document.Strings.Delete(Document.Strings.GetKey(0));
+            }
+
+
+            //Save all new strings
+            foreach (var entry in m_collection)
+            {
+                Document.Strings.SetString(entry.Key, entry.Value);
+            }
+
+
+            return true;
+        }
         #endregion
+
+       
         #endregion
 
         //Grid Events
         #region Grid Events
         private void Grid_Obj_CellEdited(object sender, GridViewCellEventArgs e)
         {
-            //a grid item was just edited for an Object Strings
+            //a grid item was just edited for an Objects User Strings
             var rc = e.Row;
             var unique = CreateUniqueKey(m_collection[rc].Key, false,ref m_collection);
             m_collection[rc].Key = unique;
@@ -391,14 +417,14 @@ namespace RhinoUserText.Views
                 if (rc.Key == string.Empty) return;
                 var key = CreateUniqueKey(rc.Key, false, ref m_collection);
                 //Update the documents strings with newly entered string
-                m_collection[e.Row].Key = $"{key}";
+                m_collection[e.Row].Key = key;
             }
-            Document.Strings.SetString(rc.Key, rc.Value);
+         
            
         }
 
 
-        private void Grid_SizeChanged(object sender, System.EventArgs e)
+        private void Grid_SizeChanged(object sender, EventArgs e)
         {
             //RESIZE OUR COLUMN WIDTHS TO FIT THE GRID
             if (m_grid.Columns.Count != 2) return;
@@ -410,8 +436,9 @@ namespace RhinoUserText.Views
 
         #endregion
 
-        //Private Methods
-        #region Private Methods
+        //Helpers
+        #region Helpers
+
         public void LoadObjectStrings(RhinoObject[] selectedObjects)
         {
             m_dictionary = new Dictionary<string, string>();
@@ -431,7 +458,6 @@ namespace RhinoUserText.Views
 
 
         }
-
         public void LoadDocumentStrings()
         {
             m_collection.Clear();
@@ -440,6 +466,7 @@ namespace RhinoUserText.Views
                 m_collection.Add(new UserStringItem {Key = Document.Strings.GetKey(i),Value = Document.Strings.GetValue(i)});
             }
         }
+
         private void GetUserStringDictionary(RhinoObject ro, ref Dictionary<string, string> dictionary)
         {
             var sc = ro.Attributes.GetUserStrings().Count;
@@ -454,7 +481,7 @@ namespace RhinoUserText.Views
                     string value;
                     m_dictionary.TryGetValue(k, out value);
                     if (value != v)
-                        m_dictionary[k] = "(varies)";
+                        m_dictionary[k] = m_varies;
                 }
                 else
                 {
@@ -462,6 +489,7 @@ namespace RhinoUserText.Views
                 }
             }
         }
+
         private void ImportCsv(ref Collection<UserStringItem> collection)
         {
             //Import a csv file 
@@ -475,8 +503,8 @@ namespace RhinoUserText.Views
                     Title = m_dialog_import_title
                 };
 
-                fd.Filters.Add(new FileFilter(m_csvstr, ".csv"));
-                fd.Filters.Add(new FileFilter(m_txtstr, ".txt"));
+                fd.Filters.Add(new FileFilter(m_csvstr, m_csv));
+                fd.Filters.Add(new FileFilter(m_txtstr, m_txt));
                 fd.CurrentFilter = fd.Filters[0];
                 var result = fd.ShowDialog(RhinoEtoApp.MainWindow);
                 if (result != DialogResult.Ok) return;
@@ -515,15 +543,15 @@ namespace RhinoUserText.Views
                 Rhino.Runtime.HostUtils.ExceptionReport(ex);
             }
         }
-        private void ExportCsv(Collection<UserStringItem> collection)
+        private void ExportCsv(IEnumerable<UserStringItem> collection)
         {
 
             //Save off a set of keys
             try
             {
                 var fd = new Eto.Forms.SaveFileDialog();
-                fd.Filters.Add(new FileFilter(m_csvstr, ".csv"));
-                fd.Filters.Add(new FileFilter(m_txtstr, ".txt"));
+                fd.Filters.Add(new FileFilter(m_csvstr, m_csv));
+                fd.Filters.Add(new FileFilter(m_txtstr, m_txt));
                 fd.Title = m_dialog_export_title;
                 var export_result = fd.ShowDialog(RhinoEtoApp.MainWindow);
 
@@ -532,7 +560,7 @@ namespace RhinoUserText.Views
 
                 if (fd.CheckFileExists)
                 {
-                    var replace = Dialogs.ShowMessage(LOC.STR($"Are you sure you want to replace {fd.FileName}?"),
+                    var replace = Dialogs.ShowMessage($"{m_replace_file} {fd.FileName}",
                         m_dialog_export_title, ShowMessageButton.YesNoCancel, ShowMessageIcon.Question);
 
                     if (replace != ShowMessageResult.Yes)
@@ -555,7 +583,7 @@ namespace RhinoUserText.Views
                     csv.AppendLine(entry);
 
                 File.WriteAllText(fd.FileName, csv.ToString());
-                RhinoApp.WriteLine(LOC.STR($"File successfully written to {fd.FileName}"));
+                RhinoApp.WriteLine($"{m_file_success} {fd.FileName}");
             }
             catch (Exception ex)
             {
@@ -566,7 +594,8 @@ namespace RhinoUserText.Views
 
 
         }
-        private string CreateUniqueKey(string key, bool importMode, ref Collection<UserStringItem> collection)
+
+        private static string CreateUniqueKey(string key, bool importMode, ref Collection<UserStringItem> collection)
         {
            // key = key.Replace(@"\", "\\");
 
@@ -595,7 +624,7 @@ namespace RhinoUserText.Views
             }
             return test_key;
         }
-        private  bool IsFileLocked(FileInfo file)
+        private static bool IsFileLocked(FileInfo file)
         {
             FileStream stream = null;
             try
@@ -612,8 +641,7 @@ namespace RhinoUserText.Views
             }
             finally
             {
-                if (stream != null)
-                    stream.Close();
+                stream?.Close();
             }
 
             //file is not locked
