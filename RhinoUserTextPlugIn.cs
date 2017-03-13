@@ -16,11 +16,16 @@ namespace RhinoUserText
     public class RhinoUserTextPlugIn : Rhino.PlugIns.PlugIn
 
     {
+
+        public override PlugInLoadTime LoadTime { get; }
+
         public RhinoUserTextPlugIn()
         {
+            LoadTime = PlugInLoadTime.AtStartup;
             Instance = this;
+          
         }
-
+        
         ///<summary>Gets the only instance of the RhinoUserTextPlugIn plug-in.</summary>
         public static RhinoUserTextPlugIn Instance
         {
