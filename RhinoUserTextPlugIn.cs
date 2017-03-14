@@ -23,7 +23,6 @@ namespace RhinoUserText
         {
             LoadTime = PlugInLoadTime.AtStartup;
             Instance = this;
-          
         }
         
         ///<summary>Gets the only instance of the RhinoUserTextPlugIn plug-in.</summary>
