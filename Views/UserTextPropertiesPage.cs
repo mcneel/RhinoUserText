@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -12,15 +13,18 @@ using Rhino.DocObjects;
 using Rhino.Input;
 using Rhino.Input.Custom;
 using Rhino.UI;
-
+using System.Runtime.InteropServices;
+using Rhino.UI.Controls;
 
 namespace RhinoUserText.Views
 {
+
+
     #region Object User Strings Properties Page
     class UserStringsObjectPropertiesPage : ObjectPropertiesPage
     {
         private UserStringsPanelControl m_page_control;
-        public override string EnglishPageTitle => LOC.STR("Object Strings");
+        public override string EnglishPageTitle => LOC.STR("Attribute Text");
         public override System.Drawing.Icon Icon => Properties.Resources.Notes;
         public override object PageControl => (m_page_control ?? (m_page_control = new UserStringsPanelControl()));
         public override bool ShouldDisplay(RhinoObject rhObj)
@@ -33,10 +37,8 @@ namespace RhinoUserText.Views
         }
         public override bool OnActivate(bool active)
         {
-          
             m_page_control.LoadObjectStrings(SelectedObjects);
             return base.OnActivate(active);
-
         }
     }
     #endregion
@@ -45,7 +47,7 @@ namespace RhinoUserText.Views
     public class UserStringsDocumentOptionsPage : OptionsDialogPage
     {
         public RhinoDoc Document { get; set; }
-        public UserStringsDocumentOptionsPage(RhinoDoc doc) : base(LOC.STR("User Strings"))
+        public UserStringsDocumentOptionsPage(RhinoDoc doc) : base(LOC.STR("Document Text"))
         {
             Document = doc;
         }
@@ -54,13 +56,21 @@ namespace RhinoUserText.Views
         public override bool OnApply()
         {
             return (m_page_control == null || m_page_control.OnApply());
-            return base.OnApply();
         }
     }
     #endregion
 
-    class UserStringsPanelControl : Panel
+
+    [Guid("A9B10690-89F5-4AAC-9445-DF90D56F5E2D")]
+    public class UserStringsPanelControl : Panel, IPanel
     {
+        //This Panel is used in 3 places
+        //Rhino Options - Document Text
+        //Object Properties - Attribute Text
+        //Floating - Document Text (like the notes panel)
+        //Depending on which panel mode its in the controls and events will shift around. 
+
+
         #region localized strings for things
         private readonly string m_new = LOC.STR("New...");
         private readonly string m_delete = LOC.STR("Delete..");
@@ -81,39 +91,47 @@ namespace RhinoUserText.Views
         private readonly string m_varies = LOC.STR("(varies)");
         private readonly string m_csv = LOC.STR(".csv");
         private readonly string m_txt = LOC.STR(".txt");
-
+        private readonly string m_attribute_txt = LOC.STR("Attribute Text");
+        private readonly string m_document_txt = LOC.STR("Document Text");
+        private readonly string m_filter_txt = LOC.STR("Filter");
         #endregion
-
 
         private GridView m_grid;
         private Dictionary<string, string> m_dictionary = new Dictionary<string, string>();
         private Collection<UserStringItem> m_collection = new ObservableCollection<UserStringItem>();
         private RhinoObject[] SelectedObjects { get; set; }
+        private RhinoDoc Document { get; set; }
         private bool IsDocumentText { get;}
-        private RhinoDoc Document { get;}
-
-
+        private bool UpdateStrings { get; set; }
+        private bool DocumentPanelActive { get; set; }
+        public static Guid PanelId => typeof(UserStringsPanelControl).GUID;
+      
         //Panel Creation
         #region Panel Creation
         public UserStringsPanelControl(RhinoDoc doc)
-        {   //Called when creating the Document User Strings Panel
+        {   //Called when creating the Document Text Panel in Document Options
             Document = doc;
             IsDocumentText = true;
             LayoutPanel();
             LoadDocumentStrings();
         }
-        public UserStringsPanelControl()
-        {   //Called when Creating a panel for Object User Strings
-            IsDocumentText = false;
-            LayoutPanel();
-        }
+
+
         public void InitializeControls(RhinoObject[] rhObjs)
         {
-           
-
+            //Called for Attribute Panel Mode
             SelectedObjects = rhObjs;
             LoadObjectStrings(SelectedObjects);
         }
+        public UserStringsPanelControl()
+        {   //Called when Creating a panel for Object Attribute Text
+            IsDocumentText = false;
+            LayoutPanel();
+        }
+
+       
+
+       
         #endregion
 
         //Panel Layout
@@ -126,11 +144,13 @@ namespace RhinoUserText.Views
             m_grid.GridLines = GridLines.Both;
             m_grid.AllowColumnReordering = false;
             m_grid.AllowMultipleSelection = true;
+           
             m_grid.Columns.Add(new GridColumn
             {
                 DataCell = new TextBoxCell("Key"),
                 HeaderText = m_headerkey,
                 AutoSize = false,
+                
             });
             m_grid.Columns.Add(new GridColumn
             {
@@ -153,30 +173,74 @@ namespace RhinoUserText.Views
             {
                 m_grid.CellEdited += Grid_Obj_CellEdited;
             }
+
+            if (DocumentPanelActive)
+                m_grid.CellEdited += Grid_Doc_CellEdited;
+
             #endregion
 
-
             var btn_stack_layout = CreateButtonStackLayout();
-
             //Build the main table
-            Content = new TableLayout
-            {
-                Padding = new Padding(4,4,4,20),
-                Spacing = new Size(4, 4),
-                Rows =
+
+            var separator_txt = IsDocumentText ? m_document_txt : m_attribute_txt;
+
+            //Filter button
+            var btn_filter = new Button { Text = m_filter_txt};
+            btn_filter.Click += Btn_filter_Click;
+
+            var txt_filter = new TextBox();
+            txt_filter.KeyUp += Txt_filter_KeyUp;
+
+            Content =
+                new TableLayout()
                 {
-                    new TableLayout()
+                    Padding = 10,
+                    Spacing = new Size(4,4),
+                    Rows =
                     {
-                        Spacing = new Size(4,4),
-                        Rows =
+                        new LabelSeparator() {Text = separator_txt},
+                        new StackLayout
                         {
-                        new TableRow(new TableCell(m_grid,true), new TableCell(btn_stack_layout)){ScaleHeight = false},
-                        }
-                    },
-                }
-            };
-          
+                            Spacing = 4,
+                            Orientation = Orientation.Horizontal,
+                            HorizontalContentAlignment = HorizontalAlignment.Right,
+                            Items =
+                            {
+                                txt_filter,
+                                btn_filter,
+                            }
+                        },
+                        new TableLayout()
+                          {
+                            Padding = new Padding(4, 4, 4, 20),
+                            Spacing = new Size(4, 4),
+                            Rows =
+                            {
+                                new TableLayout()
+                                {
+                                    Spacing = new Size(4, 4),
+                                    Rows =
+                                    {
+                                        new TableRow(new TableCell(m_grid, true), new TableCell(btn_stack_layout))
+                                        {
+                                            ScaleHeight = false
+                                        }
+                                    }
+                                }
+                            }
+                         }
+                    }
+                };
         }
+
+        private void Txt_filter_KeyUp(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Keys.Enter)
+                return;
+
+            RhinoApp.WriteLine("TODO : Enter was pressed");
+        }
+
         public StackLayout CreateButtonStackLayout()
         {
 
@@ -255,6 +319,14 @@ namespace RhinoUserText.Views
         
         //All Panel Buttons
         #region All Panel Buttons
+        
+        //Filter Grid Button
+        private void Btn_filter_Click(object sender, EventArgs e)
+        {
+            RhinoApp.WriteLine("Filter it");
+        }
+            
+            
         //Object Properties Panel Buttons
         #region Object Properties Panel Buttons
         private void Btn_obj_add_Click(object sender, EventArgs e)
@@ -352,6 +424,9 @@ namespace RhinoUserText.Views
                 if (first_selected < 0)
                     break;
 
+                if (DocumentPanelActive)
+                    Document.Strings.Delete(m_collection[first_selected].Key);
+
                 m_collection.RemoveAt(first_selected);
             }
         }
@@ -382,10 +457,11 @@ namespace RhinoUserText.Views
             //Save all new strings
             foreach (var entry in m_collection)
             {
+             //   Debug.WriteLine($"{entry.Key} / {entry.Value}");
                 Document.Strings.SetString(entry.Key, entry.Value);
             }
 
-
+            Debug.WriteLine("Apply Button - Delete Doc Strings and Reload Collection from Doc");
             return true;
         }
         #endregion
@@ -407,9 +483,9 @@ namespace RhinoUserText.Views
                 ro.CommitChanges();
             }
         }
-
         private void Grid_Doc_CellEdited(object sender, GridViewCellEventArgs e)
         {
+
             //A grid item for a Document String was edited
             var rc = m_collection[e.Row];
             if (e.Column == 0)
@@ -419,11 +495,14 @@ namespace RhinoUserText.Views
                 //Update the documents strings with newly entered string
                 m_collection[e.Row].Key = key;
             }
-         
-           
+
+                if (!DocumentPanelActive) return;
+
+            var entry = m_collection[e.Row];
+            Document.Strings.SetString(entry.Key, entry.Value);
+            Debug.WriteLine("GRID CELL EDITED");
+            Debug.WriteLine("================");
         }
-
-
         private void Grid_SizeChanged(object sender, EventArgs e)
         {
             //RESIZE OUR COLUMN WIDTHS TO FIT THE GRID
@@ -435,7 +514,7 @@ namespace RhinoUserText.Views
         }
 
         #endregion
-
+        
         //Helpers
         #region Helpers
 
@@ -460,11 +539,14 @@ namespace RhinoUserText.Views
         }
         public void LoadDocumentStrings()
         {
+            //Read all of the document strings into our main collection and grid controls
+            if (Document == null) return;
             m_collection.Clear();
-            for (int i = 0; i < Document.Strings.Count; i++)
+            for (var i = 0; i < Document?.Strings.Count; i++)
             {
-                m_collection.Add(new UserStringItem {Key = Document.Strings.GetKey(i),Value = Document.Strings.GetValue(i)});
+                m_collection.Add(new UserStringItem {Key = Document?.Strings.GetKey(i),Value = Document?.Strings.GetValue(i)});
             }
+            UpdateStrings = false;
         }
 
         private void GetUserStringDictionary(RhinoObject ro, ref Dictionary<string, string> dictionary)
@@ -647,8 +729,68 @@ namespace RhinoUserText.Views
             //file is not locked
             return false;
         }
-      
+
         #endregion
+        
+        //Floating Document Text Panel Mode
+        #region Floating Document Text Panel
+        public static UserStringsPanelControl Panel(uint documentSerialNumber)
+        {
+            return (Panels.GetPanel(PanelId, documentSerialNumber) as UserStringsPanelControl);
+        }
+        //Floating Document Text Panel Constructor
+        public UserStringsPanelControl(uint documentSerialNumber)
+        {
+            //Called when creating a panel for the Document Text ("like notes")
+            Document = RhinoDoc.FromRuntimeSerialNumber(documentSerialNumber);
+            DocumentPanelActive = true;
+            IsDocumentText = true;
+            LayoutPanel();
+            LoadDocumentStrings();
+        }
+        //Floating Document Text Panel Events 
+        #region document text IPanel events
+        public void PanelShown(uint documentSerialNumber, ShowPanelReason reason)
+        {
+            Document = RhinoDoc.FromRuntimeSerialNumber(documentSerialNumber);
+            RhinoDoc.DocumentPropertiesChanged += RhinoDoc_DocumentPropertiesChanged;
+            RhinoApp.Idle += RhinoApp_Idle;
+            DocumentPanelActive = true;
+            LayoutPanel();
+        }
+        public void PanelHidden(uint documentSerialNumber, ShowPanelReason reason)
+        {
+            DocumentPanelActive = false;
+            RhinoDoc.DocumentPropertiesChanged -= RhinoDoc_DocumentPropertiesChanged;
+            RhinoApp.Idle -= RhinoApp_Idle;
+        }
+
+        public void PanelClosing(uint documentSerialNumber, bool onCloseDocument)
+        {
+            DocumentPanelActive = false;
+            RhinoDoc.DocumentPropertiesChanged -= RhinoDoc_DocumentPropertiesChanged;
+            RhinoApp.Idle -= RhinoApp_Idle;
+        }
+
+        private void RhinoApp_Idle(object sender, EventArgs e)
+        {
+            //if the document properties have changed let's go look at the doc strings.
+            if (UpdateStrings)
+                LoadDocumentStrings();
+        }
+
+        private void RhinoDoc_DocumentPropertiesChanged(object sender, DocumentEventArgs e)
+        {
+            //The document has been changed, we need to look at our doc strings the next time rhino is idle.
+            UpdateStrings = true;
+        }
+
+        #endregion
+       
+        #endregion 
+
+
+
     }
 
 
