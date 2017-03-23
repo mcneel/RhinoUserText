@@ -14,6 +14,7 @@ using Rhino.Input;
 using Rhino.Input.Custom;
 using Rhino.UI;
 using System.Runtime.InteropServices;
+using Rhino.FileIO;
 using Rhino.UI.Controls;
 
 namespace RhinoUserText.Views
@@ -70,42 +71,64 @@ namespace RhinoUserText.Views
         //Floating - Document Text (like the notes panel)
         //Depending on which panel mode its in the controls and events will shift around. 
 
-
+        //All of the visible strings that need localization
         #region localized strings for things
+
+        //Button labels
         private readonly string m_new = LOC.STR("New...");
         private readonly string m_delete = LOC.STR("Delete..");
         private readonly string m_import = LOC.STR("Import...");
         private readonly string m_export = LOC.STR("Export...");
         private readonly string m_match = LOC.STR("Match...");
-        private readonly string m_command_prompt = LOC.STR("Select object To match");
         private readonly string m_headerkey = LOC.STR("Key");
         private readonly string m_headervalue = LOC.STR("Value");
         private readonly string m_dialog_import_title = LOC.STR("Import CSV");
         private readonly string m_dialog_export_title = LOC.STR("Export CSV");
+        //Command Prompts
+        private readonly string m_command_prompt = LOC.STR("Select object To match");
+        //file dialogs
         private readonly string m_csvstr = LOC.STR("CSV (Comma delimited");
         private readonly string m_txtstr = LOC.STR("TXT (Comma delimited)");
+        private readonly string m_rhino_str = LOC.STR("Rhino 3D Models");
+        private readonly string m_csv = LOC.STR(".csv");
+        private readonly string m_txt = LOC.STR(".txt");
+        private readonly string m_3_dm = LOC.STR(".3dm");
+        //File dialog message boxes.
         private readonly string m_file_error_message_title = LOC.STR("Import Error");
         private readonly string m_file_locked_message = LOC.STR("File is currently in use.");
         private readonly string m_replace_file = LOC.STR("Are you sure you want to replace");
-        private readonly string m_file_success = LOC.STR("File successfully written to");
         private readonly string m_varies = LOC.STR("(varies)");
-        private readonly string m_csv = LOC.STR(".csv");
-        private readonly string m_txt = LOC.STR(".txt");
+        private readonly string m_file_success = LOC.STR("File successfully written to");
+        //Panel labels
         private readonly string m_attribute_txt = LOC.STR("Attribute Text");
         private readonly string m_document_txt = LOC.STR("Document Text");
         private readonly string m_filter_txt = LOC.STR("Filter");
         #endregion
 
+        //All of the panels controls, objects and properties
+        #region controls, objects, properties
         private GridView m_grid;
         private Dictionary<string, string> m_dictionary = new Dictionary<string, string>();
         private Collection<UserStringItem> m_collection = new ObservableCollection<UserStringItem>();
+        private FilterCollection<UserStringItem> m_filter_collection = new FilterCollection<UserStringItem>();
         private RhinoObject[] SelectedObjects { get; set; }
         private RhinoDoc Document { get; set; }
         private bool IsDocumentText { get;}
         private bool UpdateStrings { get; set; }
         private bool DocumentPanelActive { get; set; }
         public static Guid PanelId => typeof(UserStringsPanelControl).GUID;
-      
+        public string FilterText { get; set; } = string.Empty;
+        public TextBox TxtFilter = new TextBox();
+        public string GetText()
+        {
+            return FilterText;
+        }
+        public void SetText(string value)
+        {
+            FilterText = value;
+        }
+        #endregion
+        
         //Panel Creation
         #region Panel Creation
         public UserStringsPanelControl(RhinoDoc doc)
@@ -115,8 +138,6 @@ namespace RhinoUserText.Views
             LayoutPanel();
             LoadDocumentStrings();
         }
-
-
         public void InitializeControls(RhinoObject[] rhObjs)
         {
             //Called for Attribute Panel Mode
@@ -128,23 +149,24 @@ namespace RhinoUserText.Views
             IsDocumentText = false;
             LayoutPanel();
         }
-
-       
-
-       
+        
         #endregion
 
         //Panel Layout
         #region Panel Layout
         private void LayoutPanel()
         {
+
+            //Create a filtered collection for searching
+            m_filter_collection = new FilterCollection<UserStringItem>(m_collection);
+            m_filter_collection.Refresh();
+
             #region Construct a GridView
-            m_grid = new GridView { DataStore = m_collection };
+            m_grid = new GridView { DataStore = m_filter_collection };
             m_grid.SizeChanged += Grid_SizeChanged;
             m_grid.GridLines = GridLines.Both;
             m_grid.AllowColumnReordering = false;
             m_grid.AllowMultipleSelection = true;
-           
             m_grid.Columns.Add(new GridColumn
             {
                 DataCell = new TextBoxCell("Key"),
@@ -179,18 +201,17 @@ namespace RhinoUserText.Views
 
             #endregion
 
+            //The label separator control at the top telling us which panel we are using
+            var panel_labelseparator_txt = IsDocumentText ? m_document_txt : m_attribute_txt;
+            //The stack of buttons
             var btn_stack_layout = CreateButtonStackLayout();
-            //Build the main table
-
-            var separator_txt = IsDocumentText ? m_document_txt : m_attribute_txt;
-
             //Filter button
             var btn_filter = new Button { Text = m_filter_txt};
             btn_filter.Click += Btn_filter_Click;
-
-            var txt_filter = new TextBox();
-            txt_filter.KeyUp += Txt_filter_KeyUp;
-
+            //Filter Text Box
+            TxtFilter.KeyUp += Txt_filter_KeyUp;
+            TxtFilter.TextBinding.Bind(GetText, SetText);
+            //Build the main table for the panels
             Content =
                 new TableLayout()
                 {
@@ -198,7 +219,7 @@ namespace RhinoUserText.Views
                     Spacing = new Size(4,4),
                     Rows =
                     {
-                        new LabelSeparator() {Text = separator_txt},
+                        new LabelSeparator() {Text = panel_labelseparator_txt},
                         new StackLayout
                         {
                             Spacing = 4,
@@ -206,7 +227,7 @@ namespace RhinoUserText.Views
                             HorizontalContentAlignment = HorizontalAlignment.Right,
                             Items =
                             {
-                                txt_filter,
+                                TxtFilter,
                                 btn_filter,
                             }
                         },
@@ -232,15 +253,7 @@ namespace RhinoUserText.Views
                     }
                 };
         }
-
-        private void Txt_filter_KeyUp(object sender, KeyEventArgs e)
-        {
-            if (e.Key != Keys.Enter)
-                return;
-
-            RhinoApp.WriteLine("TODO : Enter was pressed");
-        }
-
+        //Create the command buttons stack off to the right of the panels
         public StackLayout CreateButtonStackLayout()
         {
 
@@ -316,23 +329,33 @@ namespace RhinoUserText.Views
             return stack_layout;
         }
         #endregion
-        
+
         //All Panel Buttons
         #region All Panel Buttons
-        
-        //Filter Grid Button
+
+        //Filter Grid Button // Visible on all 3 panels
         private void Btn_filter_Click(object sender, EventArgs e)
         {
-            RhinoApp.WriteLine("Filter it");
+          Filter();
         }
-            
-            
+        //Filter Grid Text Box Key Up // Visible on all 3 panels
+        private void Txt_filter_KeyUp(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Keys.Enter)
+                return;
+            Filter();
+        }
+
+
         //Object Properties Panel Buttons
         #region Object Properties Panel Buttons
         private void Btn_obj_add_Click(object sender, EventArgs e)
         {
+            ResetFilter();
+
             m_collection.Add(new UserStringItem { Key = string.Empty, Value = string.Empty });
             m_grid.BeginEdit(m_collection.Count - 1, 0);
+
         }
         private void Btn_obj_delete_Click(object sender, EventArgs e)
         {
@@ -352,8 +375,11 @@ namespace RhinoUserText.Views
         }
         private void Btn_obj_import_Click(object sender, EventArgs e)
         {
-           ImportCsv(ref m_collection);
-            foreach(var ro in SelectedObjects)
+            ResetFilter();
+           
+            ImportCsv(ref m_collection);
+
+            foreach (var ro in SelectedObjects)
             { 
                 foreach (var c in m_collection)
                 {
@@ -410,13 +436,18 @@ namespace RhinoUserText.Views
         #region Document Properties Panel Buttons
         private void Btn_doc_add_Click(object sender, EventArgs e)
         {
+            ResetFilter();
+            m_grid.DataStore = m_filter_collection;
+
             //Add a new Document String
-            m_collection.Add(new UserStringItem { Key = string.Empty, Value = string.Empty });
-            m_grid.BeginEdit(m_collection.Count - 1, 0);
+            m_filter_collection.Add(new UserStringItem { Key = string.Empty, Value = string.Empty });
+            m_grid.BeginEdit(m_filter_collection.Count - 1, 0);
+
 
         }
         private void Btn_doc_delete_Click(object sender, EventArgs e)
         {
+            
             //DELETE COLLECTION STRINGS
             while (m_grid.SelectedRows.Any())
             {
@@ -425,25 +456,30 @@ namespace RhinoUserText.Views
                     break;
 
                 if (DocumentPanelActive)
-                    Document.Strings.Delete(m_collection[first_selected].Key);
+                    Document.Strings.Delete(m_filter_collection[first_selected].Key);
 
-                m_collection.RemoveAt(first_selected);
+               m_filter_collection.RemoveAt(first_selected);
             }
+
+
         }
         private void Btn_doc_import_Click(object sender, EventArgs e)
         {
+            ResetFilter();
+
             //Import a csv file to Document Strings 
             ImportCsv(ref m_collection);
             foreach (var c in m_collection)
                 Document.Strings.SetString(c.Key, c.Value);
+
+            m_filter_collection.Refresh();
+
         }
         private void Btn_doc_export_Click(object sender, EventArgs e)
         {
             //Export the Document Strings to a CSV
            ExportCsv(m_collection);
         }
-
-
         //OnApply Button
         public bool OnApply()
         {
@@ -500,8 +536,7 @@ namespace RhinoUserText.Views
 
             var entry = m_collection[e.Row];
             Document.Strings.SetString(entry.Key, entry.Value);
-            Debug.WriteLine("GRID CELL EDITED");
-            Debug.WriteLine("================");
+
         }
         private void Grid_SizeChanged(object sender, EventArgs e)
         {
@@ -512,14 +547,29 @@ namespace RhinoUserText.Views
                 first_or_default.Width = Convert.ToInt16(m_grid.Width / 4);
             if (first_or_default != null) m_grid.Columns.Last().Width = Convert.ToInt16((m_grid.Width - (m_grid.Width / 4)) - 2);
         }
-
         #endregion
-        
+
         //Helpers
         #region Helpers
+        private void Filter()
+        {
+            m_filter_collection.Filter = filter => filter.Key.Contains(FilterText) || filter.Value.Contains(FilterText);
+            m_filter_collection.Refresh();
+            m_grid.DataStore = m_filter_collection;
+
+
+        }
+        public void ResetFilter()
+        {
+            TxtFilter.Text = string.Empty;
+            FilterText = string.Empty;
+            SetText(string.Empty);
+            m_filter_collection.Refresh();
+        }
 
         public void LoadObjectStrings(RhinoObject[] selectedObjects)
         {
+         
             m_dictionary = new Dictionary<string, string>();
             SelectedObjects = selectedObjects;
             if (!selectedObjects.Any()) return;
@@ -533,7 +583,9 @@ namespace RhinoUserText.Views
             foreach (var entry in m_dictionary)
                 m_collection.Add(new UserStringItem {Key = entry.Key, Value = entry.Value});
 
-            m_grid.DataStore = m_collection;
+            m_filter_collection = new FilterCollection<UserStringItem>(m_collection);
+            Filter();
+            m_grid.DataStore = m_filter_collection;
 
 
         }
@@ -546,7 +598,11 @@ namespace RhinoUserText.Views
             {
                 m_collection.Add(new UserStringItem {Key = Document?.Strings.GetKey(i),Value = Document?.Strings.GetValue(i)});
             }
+            m_filter_collection = new FilterCollection<UserStringItem>(m_collection);
+            Filter();
+
             UpdateStrings = false;
+
         }
 
         private void GetUserStringDictionary(RhinoObject ro, ref Dictionary<string, string> dictionary)
@@ -585,8 +641,16 @@ namespace RhinoUserText.Views
                     Title = m_dialog_import_title
                 };
 
+
+                //Add the option to read from 3dm's if we're a Document Text panel and not an Object Attribute Panel
+                var rhino_file_filter = new FileFilter(m_rhino_str, m_3_dm);
+                if (IsDocumentText)
+                  fd.Filters.Add(rhino_file_filter);
+                
+                //Add the other file type filters
                 fd.Filters.Add(new FileFilter(m_csvstr, m_csv));
                 fd.Filters.Add(new FileFilter(m_txtstr, m_txt));
+                
                 fd.CurrentFilter = fd.Filters[0];
                 var result = fd.ShowDialog(RhinoEtoApp.MainWindow);
                 if (result != DialogResult.Ok) return;
@@ -599,8 +663,18 @@ namespace RhinoUserText.Views
                         ShowMessageButton.OK, ShowMessageIcon.Error);
                     return;
                 }
+                
                 #endregion
 
+                //Lets open up a 3dm if we're in doc mode and need a 3dm
+                if (fd.CurrentFilter == rhino_file_filter)
+                {
+                    Import3Dm(file_name);
+                    return;
+                }
+
+
+                //Grab some csv either from csv file or txt file
                 #region Stream Reader to parse opened file
                 using (var reader = new StreamReader(file_name))
                 {
@@ -674,6 +748,22 @@ namespace RhinoUserText.Views
             }
 
 
+
+        }
+        private void Import3Dm(string filename)
+        {
+            var file = File3dm.Read(filename);
+            if (null == file)
+                return;
+
+            var count = file.Strings.Count;
+            for (var i = 0; i < count; i++)
+            {
+                var key = file.Strings.GetKey(i);
+                var value = file.Strings.GetValue(key);
+                m_collection.Add(new UserStringItem() {Key = key,Value = value});
+                m_filter_collection.Refresh();
+            }
 
         }
 
@@ -777,6 +867,8 @@ namespace RhinoUserText.Views
             //if the document properties have changed let's go look at the doc strings.
             if (UpdateStrings)
                 LoadDocumentStrings();
+
+            RhinoApp.Idle -= RhinoApp_Idle;
         }
 
         private void RhinoDoc_DocumentPropertiesChanged(object sender, DocumentEventArgs e)
@@ -786,14 +878,12 @@ namespace RhinoUserText.Views
         }
 
         #endregion
-       
-        #endregion 
 
-
+        #endregion
 
     }
 
-
+    //Our custom POCO for the grid. 
     public class UserStringItem
     {
         public string Key { get; set; }
