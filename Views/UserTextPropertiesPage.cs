@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -553,7 +554,7 @@ namespace RhinoUserText.Views
         #region Helpers
         private void Filter()
         {
-            m_filter_collection.Filter = filter => filter.Key.Contains(FilterText) || filter.Value.Contains(FilterText);
+            m_filter_collection.Filter = filter => filter.Key.ToLower(CultureInfo.CurrentCulture).Contains(FilterText.ToLower(CultureInfo.CurrentCulture)) || filter.Value.ToLower(CultureInfo.CurrentCulture).Contains(FilterText.ToLower(CultureInfo.CurrentCulture));
             m_filter_collection.Refresh();
             m_grid.DataStore = m_filter_collection;
 
@@ -761,7 +762,7 @@ namespace RhinoUserText.Views
             {
                 var key = file.Strings.GetKey(i);
                 var value = file.Strings.GetValue(key);
-                m_collection.Add(new UserStringItem() {Key = key,Value = value});
+                m_collection.Add(new UserStringItem() {Key = CreateUniqueKey(key,true,ref m_collection),Value = value});
                 m_filter_collection.Refresh();
             }
 
